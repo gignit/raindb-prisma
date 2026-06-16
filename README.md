@@ -146,7 +146,7 @@ result.
 ```ts
 new PrismaRainDB({
   endpoint: 'https://api.raindb.io/graphql', // required
-  apiKey:   'rdb_...',                        // required (Bearer)
+  apiKey:   'rdb_...',                        // optional (see gateway mode)
   freshness: 'merge',          // 'merge' | 'signal' | 'off'  (default 'merge')
   timeoutMs: 30000,            // per-request timeout
   maxDriftMerge: 500,          // cap on records merged per list read
@@ -155,14 +155,27 @@ new PrismaRainDB({
     formations: ['vizzda-events', 'vizzda-contact'],
     scopeKeys: { 'vizzda-events': 'eventId' },
   },
+  // gateway mode (browser / bolt): omit apiKey, carry a session credential
+  headers: () => ({ authorization: `Bearer ${sessionToken}` }),
+  credentials: 'same-origin',  // for cookie-based gateway sessions
   logger,                      // optional structured logger
 });
 ```
 
+**Two auth modes:**
+
+- **Direct (server-side):** pass `apiKey` (the `rdb_*` token). Sent as
+  `Authorization: Bearer`. Use from a trusted backend that may hold the key.
+- **Gateway (browser / bolt):** **omit `apiKey`** and point `endpoint` at a
+  trusted proxy (a Lightning Bolt's `/graphql`). Supply `headers` carrying a
+  short-lived session credential the gateway issued at login; the gateway
+  validates it and injects the real RainDB key server-side. **The RainDB key
+  never reaches the browser.** See the bolt deployment guide.
+
 The `models` map lets the adapter translate hyphenated RainDB formation
-names and per-model primary keys precisely. It is optional but recommended;
-without it the adapter assumes the table name maps to the formation id and
-the primary key is `id`.
+names (the Periscope `-` -> `__` table rule) and per-model primary keys
+precisely. Optional but recommended; without it the adapter assumes the
+table name maps to the formation id and the primary key is `id`.
 
 ---
 
@@ -192,12 +205,34 @@ running destructive migrations. (See the generator package docs.)
 
 ---
 
+## Deploying as a Lightning Bolt (one deployable unit, no separate server)
+
+A RainDB **Lightning Bolt** can be your entire backend: it serves your SPA,
+authenticates the app, and is the secure RainDB gateway -- the tenant key
+never leaves the bolt. The real `PrismaClient` runs either in the browser
+(the bolt serves the SPA + gateways the calls) or **inside the bolt itself**
+(server-side, via the `raindb.wasm` capability that lets the WASM query
+engine run in the bolt's runtime).
+
+The full, source-grounded walkthrough -- bolt anatomy, `capabilities.json`
+(including the `raindb.wasm` opt-in), the secure session-token auth model,
+`routes.json`/`deployment.json`, the `raindb-cli lightning bolt deploy`
+command + flags, and both browser-mode and in-bolt modes -- is in:
+
+**[`docs/LIGHTNING_BOLT_GUIDE.md`](docs/LIGHTNING_BOLT_GUIDE.md)**
+
+A working reference bolt (Prisma on RainDB, live) is the `crexprisma`
+project.
+
+---
+
 ## Status
 
 Early release. The read path (Periscope SQL + freshness merge), the write
 path (create/update/delete translation), error mapping, and the RainDB
 transport are implemented and tested -- including live integration tests
-against a production RainDB tenant. See `CHANGELOG.md`.
+against a production RainDB tenant. The adapter runs server-side (Node), in
+the browser, and inside a Lightning Bolt. See `CHANGELOG.md`.
 
 ## License
 
