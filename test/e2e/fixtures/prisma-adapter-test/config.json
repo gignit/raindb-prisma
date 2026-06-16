@@ -1,0 +1,50 @@
+{
+  "configVersion": 1,
+  "formationId": "prisma-adapter-test",
+  "visibility": "internal",
+  "pathTemplate": "tenants/{{.tenantId}}/entities/prisma-adapter-test/{{.id}}/{{.yyyy}}/{{.mm}}/{{.dd}}/{{.dropletId}}.json",
+  "scopeKey": "id",
+  "autoGenId": true,
+  "minSchemaVersion": 1,
+  "maxSchemaVersion": 1,
+  "compatibleSchemas": ["v1"],
+  "indexes": [
+    {
+      "name": "by-id-latest",
+      "template": "tenants/{{.tenantId}}/indexes/prisma-adapter-test/by-id/{{.id}}/latest.json",
+      "type": "pointer",
+      "strategy": "write"
+    },
+    {
+      "name": "by-update",
+      "template": "tenants/{{.tenantId}}/indexes/prisma-adapter-test/by-update/{{.id}}/latest.json",
+      "type": "pointer",
+      "strategy": "write"
+    }
+  ],
+  "queryConfig": {
+    "enabled": true,
+    "flattenDepth": 1,
+    "defaultLimit": 50,
+    "maxLimit": 1000
+  },
+  "tierPolicy": {
+    "tiers": {
+      "stream": {
+        "enabled": true,
+        "source": { "type": "droplets", "index": "by-update" },
+        "trigger": { "next": "*/5 * * * *", "tz": "UTC", "operator": "OR" },
+        "path": "tenants/{{.tenantId}}/periscope/{{.formationId}}/stream/{{.yyyy}}/{{.mm}}/{{.dd}}/{{.poolId}}.parquet",
+        "retainInputs": true,
+        "retention": { "afterSupersession": "30d" }
+      }
+    },
+    "partition": { "strategy": "formation" },
+    "catalog": { "location": "tenants/{{.tenantId}}/periscope/{{.formationId}}/catalog" },
+    "expiration": { "schedule": "daily", "snapshotRetention": "30d" }
+  },
+  "views": {
+    "defaultBehavior": { "dedup": true, "funnelOverlay": false },
+    "queryDefaults": { "autoPool": true, "window": "10s" }
+  }
+}

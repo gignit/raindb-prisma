@@ -1,0 +1,74 @@
+{
+  "name": "@raindb/prisma-adapter",
+  "version": "0.1.0",
+  "description": "Prisma driver adapter for RainDB -- run the Prisma ORM against RainDB's S3-native dataplane (periscope SQL for reads, immutable droplets for writes).",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "bin": {
+    "raindb-prisma-generator": "./dist/generator/index.cjs",
+    "raindb-prisma": "./dist/cli/index.cjs"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint \"src/**/*.ts\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "prisma",
+    "prisma-adapter",
+    "driver-adapter",
+    "raindb",
+    "orm",
+    "s3",
+    "periscope"
+  ],
+  "author": "Gignit",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gignit/raindb-prisma.git",
+    "directory": "."
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@prisma/driver-adapter-utils": "^7.0.0"
+  },
+  "devDependencies": {
+    "@prisma/client": "^7.0.0",
+    "@prisma/generator-helper": "^7.8.0",
+    "@types/node": "^22.10.0",
+    "prisma": "^7.0.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "peerDependencies": {
+    "@prisma/client": ">=7.0.0"
+  }
+}

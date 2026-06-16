@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Prisma Adapter Test Entity",
+  "description": "Scratch formation for @raindb/prisma-adapter end-to-end write tests. Safe to write/delete; not used by any application.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Primary key (scopeKey), auto-generated UUIDv7 when omitted."
+    },
+    "name": {
+      "type": "string",
+      "description": "Free-text label."
+    },
+    "count": {
+      "type": "integer",
+      "description": "An integer field for update tests."
+    },
+    "active": {
+      "type": "boolean",
+      "description": "A boolean field."
+    },
+    "deleted": {
+      "type": "boolean",
+      "description": "Soft-delete marker set by the adapter's DELETE translation."
+    },
+    "deletedAt": {
+      "type": "string",
+      "description": "Soft-delete timestamp."
+    }
+  },
+  "required": ["id"]
+}

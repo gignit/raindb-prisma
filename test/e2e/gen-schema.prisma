@@ -1,0 +1,28 @@
+// Schema exercising the @raindb/prisma generator end to end. The `raindb`
+// generator emits snapshot-capable formations; the prisma-client generator
+// emits the typed client used by the adapter.
+
+generator client {
+  provider        = "prisma-client-js"
+  output          = "./gen-generated"
+}
+
+generator raindb {
+  // Path is rewritten by the e2e harness to the built generator; relative
+  // here so the fixture is portable.
+  provider = "node ../../dist/generator/index.cjs"
+  output   = "../../.gen-out/formations"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model GenPost {
+  postId    String   @id @default(uuid(7)) @map("postId")
+  title     String?  @map("title")
+  views     Int?     @map("views")
+  published Boolean? @map("published")
+
+  @@map("gen__post")
+}

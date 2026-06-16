@@ -1,0 +1,45 @@
+// End-to-end test schema mapping a Prisma model to a real RainDB
+// `vizzda-events` formation. The @@map uses the Periscope table-name rule
+// (hyphen -> double underscore): vizzda-events -> "vizzda__events".
+//
+// This is a READ-focused subset of the formation's columns -- enough to
+// prove a real PrismaClient + the RainDB adapter executes findMany /
+// findFirst against production RainDB.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+  output          = "./generated"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model VizzdaEvent {
+  eventId             String  @id @map("eventId")
+  eventTypeName       String? @map("eventTypeName")
+  propertyName        String? @map("propertyName")
+  propertyCity        String? @map("propertyCity")
+  propertyState       String? @map("propertyState")
+  propertyType        String? @map("propertyType")
+  magnitude           Float?  @map("magnitude")
+  totalSquareFeet     Float?  @map("totalSquareFeet")
+
+  @@map("vizzda__events")
+}
+
+// Scratch formation for write-path e2e (create/update/delete). Maps to the
+// `prisma-adapter-test` formation; @@map uses the Periscope __ rule.
+// id has a client-side default so Prisma generates a UUID when the caller
+// omits it. (For a formation with autoGenId, the @raindb/prisma generator
+// emits this default automatically; here we set it by hand.)
+model PrismaTest {
+  id      String   @id @default(uuid(7)) @map("id")
+  name    String?  @map("name")
+  count   Int?     @map("count")
+  active  Boolean? @map("active")
+  deleted Boolean? @map("deleted")
+
+  @@map("prisma__adapter__test")
+}
