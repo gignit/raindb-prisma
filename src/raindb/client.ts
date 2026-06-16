@@ -165,15 +165,29 @@ export class RainDBClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.#cfg.timeoutMs);
 
+    const headers: Record<string, string> = { 'content-type': 'application/json' };
+    // Direct mode: when an apiKey is configured (trusted server-side use, e.g.
+    // a Node backend), send it as the Bearer credential.
+    if (this.#cfg.apiKey) {
+      headers.authorization = `Bearer ${this.#cfg.apiKey}`;
+    }
+    // Gateway mode: caller-supplied headers carry the SESSION credential the
+    // gateway issued after auth (NOT the tenant key). The gateway validates it
+    // and injects the real key server-side. Computed per request so a rotating
+    // session token is always fresh.
+    if (this.#cfg.headers) {
+      const extra =
+        typeof this.#cfg.headers === 'function' ? await this.#cfg.headers() : this.#cfg.headers;
+      Object.assign(headers, extra);
+    }
+
     let res: Response;
     try {
       res = await this.#cfg.fetch(this.#cfg.endpoint, {
         method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${this.#cfg.apiKey}`,
-        },
+        headers,
         body: JSON.stringify({ query, variables }),
+        credentials: this.#cfg.credentials,
         signal: controller.signal,
       });
     } catch (err) {
