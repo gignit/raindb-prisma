@@ -45,9 +45,13 @@ export async function driftMerge(
   cfg: ResolvedConfig,
   input: DriftMergeInput,
 ): Promise<DriftMergeOutput> {
-  const drifted = input.latest.filter(
-    (b) => b.snapshotDropletId !== b.currentDropletId && b.indexPrefix,
-  );
+  // Read the server-computed verdict rather than re-deriving drift from the
+  // cursors. The previous `snapshotDropletId !== currentDropletId && indexPrefix`
+  // check missed the cold-current guard: when the current side is unobserved
+  // (currentDropletId === '', server verdict UNKNOWN) it compared snapshot !== ''
+  // and falsely flagged drift, firing a needless harvest. Only BEHIND means
+  // "known behind -- there is a tail to merge".
+  const drifted = input.latest.filter((b) => b.freshnessStatus === 'BEHIND');
   if (drifted.length === 0) {
     return { columns: input.columns, rows: input.rows };
   }

@@ -83,11 +83,14 @@ export async function executeRead(deps: ReadDeps, query: SqlQuery): Promise<SqlR
     columns = merged.columns;
   } else if (cfg.freshness === 'signal' && result.latest) {
     for (const b of result.latest) {
-      if (b.snapshotDropletId !== b.currentDropletId) {
+      // Read the server verdict, not a hand-rolled cursor compare -- BEHIND is
+      // "known behind"; UNKNOWN (cold current side) is undetermined, not drift.
+      if (b.freshnessStatus === 'BEHIND') {
         cfg.logger.debug('raindb.read: drift detected (signal-only)', {
           formationId: b.formationId,
           snapshot: b.snapshotDropletId,
           current: b.currentDropletId,
+          status: b.freshnessStatus,
         });
       }
     }

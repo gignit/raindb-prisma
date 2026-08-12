@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Drift is read from the server's `freshnessStatus` verdict, not re-derived.**
+  `driftMerge` and the `signal`-mode logger previously hand-rolled
+  `snapshotDropletId !== currentDropletId`, which missed the cold-current
+  guard: when the current side was unobserved (`currentDropletId === ''`) they
+  compared `snapshot !== ''` and FALSELY flagged drift, firing a needless
+  harvest / logging phantom drift. Both now filter on
+  `freshnessStatus === 'BEHIND'` (the server's verdict; `UNKNOWN` is
+  undetermined, not drift). Added the `FreshnessStatus` type + the
+  `freshnessStatus` field to `RainDBFormationLatest`, and selected it in the
+  `executeSQL` query. Regression test covers the cold-current case.
+
 ### Added
 
 - Initial RainDB Prisma driver adapter (`PrismaRainDB`), targeting Prisma 7.

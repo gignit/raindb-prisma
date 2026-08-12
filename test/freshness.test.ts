@@ -47,9 +47,40 @@ describe('driftMerge', () => {
           snapshotKey: 'k1',
           currentKey: 'k1',
           indexPrefix: 'indexes/f/by-update/',
+          freshnessStatus: 'CURRENT' as const,
         },
       ],
     });
+    expect(out.rows).toEqual([{ id: 'a', name: 'A' }]);
+  });
+
+  it('does NOT merge when the current side is undetermined (UNKNOWN), cold-guard', async () => {
+    // Regression: the previous hand-rolled check was
+    //   snapshotDropletId !== currentDropletId && indexPrefix
+    // which, when the current side is unobserved (currentDropletId === ''),
+    // compared snapshot !== '' and FALSELY flagged drift, firing a needless
+    // harvest. The server reports UNKNOWN here; driftMerge must NOT merge.
+    // A fakeClient with keys present would (wrongly) merge if the guard broke.
+    const client = fakeClient({
+      keys: ['indexes/f/by-update/z/latest.json'],
+      droplets: { z: { id: 'z', name: 'Z-should-not-appear' } },
+    });
+    const out = await driftMerge(client, cfg, {
+      columns: ['id', 'name'],
+      rows: [{ id: 'a', name: 'A' }],
+      latest: [
+        {
+          formationId: 'f',
+          snapshotDropletId: 'snap',
+          currentDropletId: '', // cold: current side unobserved
+          snapshotKey: 'k1',
+          currentKey: '',
+          indexPrefix: 'indexes/f/by-update/',
+          freshnessStatus: 'UNKNOWN' as const,
+        },
+      ],
+    });
+    // UNKNOWN is not BEHIND -> snapshot rows are authoritative, no merge.
     expect(out.rows).toEqual([{ id: 'a', name: 'A' }]);
   });
 
@@ -79,6 +110,7 @@ describe('driftMerge', () => {
           snapshotKey: 'indexes/f/by-update/a/latest.json',
           currentKey: 'indexes/f/by-update/c/latest.json',
           indexPrefix: 'indexes/f/by-update/',
+          freshnessStatus: 'BEHIND' as const,
         },
       ],
     });
@@ -104,6 +136,7 @@ describe('driftMerge', () => {
           snapshotKey: 'k',
           currentKey: 'k2',
           indexPrefix: 'indexes/f1/by-update/',
+          freshnessStatus: 'BEHIND' as const,
         },
         {
           formationId: 'f2',
@@ -112,6 +145,7 @@ describe('driftMerge', () => {
           snapshotKey: 'k',
           currentKey: 'k2',
           indexPrefix: 'indexes/f2/by-update/',
+          freshnessStatus: 'BEHIND' as const,
         },
       ],
     });
@@ -140,6 +174,7 @@ describe('driftMerge', () => {
           snapshotKey: 'k',
           currentKey: 'k2',
           indexPrefix: 'indexes/f/by-update/',
+          freshnessStatus: 'BEHIND' as const,
         },
       ],
     });

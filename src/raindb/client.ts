@@ -43,6 +43,7 @@ const EXECUTE_SQL = /* GraphQL */ `
         currentDropletId
         currentKey
         indexPrefix
+        freshnessStatus
       }
     }
   }
