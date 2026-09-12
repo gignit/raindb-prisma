@@ -152,10 +152,11 @@ export class RainDBClient {
 
   async listKeys(
     prefix: string,
-    opts: { pageSize?: number; cursor?: string; after?: string } = {},
+    opts: { pageSize?: number; maxKeys?: number; cursor?: string; after?: string } = {},
   ): Promise<RainDBKeyPage> {
     const input: Record<string, unknown> = { prefix };
     if (opts.pageSize !== undefined) input.pageSize = opts.pageSize;
+    if (opts.maxKeys !== undefined) input.maxKeys = opts.maxKeys;
     if (opts.cursor !== undefined) input.cursor = opts.cursor;
     if (opts.after !== undefined) input.after = opts.after;
     const data = await this.#request<{ listKeys: RainDBKeyPage }>(LIST_KEYS, { input });

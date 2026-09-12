@@ -1,0 +1,21 @@
+# Downstream-owned compatibility lock for the RainDB Prisma adapter.
+upstreams:
+  raindb:
+    reconciled_sha: d6b648277ce1d0ce6efedcf6a9976650393c1655
+    reconciled_date: "2026-09-12"
+    note: >-
+      Reconciled the adapter's executeSQL, readLatest, writeDroplet, listKeys,
+      and CLI publishFormation operations against the current GraphQL SDL;
+      all five remain compatible and their operation documents are unchanged.
+      Verified deployment.json engine nodejs-20 selects the native Node pod
+      runtime for server-side Prisma, with warm reuse and seeded 300-second
+      idle TTL / 1024 MB memory headroom. Browser gateway mode is retained.
+    reconciled_delta:
+      adopted:
+        - "ListKeysInput.maxKeys: bounded accumulation for freshness merges, with cursor continuation and existing page/deadline guards."
+        - "Scan layout and invalid planStrategy errors map to Prisma InvalidInputValue with the original message."
+      not_adopted:
+        - "Explicit planStrategy: omitted so queries use the formation default; generator unchanged."
+    validation:
+      command: "npm run lint && npm test && npm run build"
+      scope: "Local adapter checks; no new live platform validation in this reconciliation."

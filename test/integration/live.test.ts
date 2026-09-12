@@ -24,13 +24,20 @@ const formation = process.env.RAINDB_TEST_FORMATION ?? 'vizzda-events';
 const live = endpoint && apiKey ? describe : describe.skip;
 
 live('live: RainDB transport', () => {
-  const client = new RainDBClient(
-    resolveConfig({ endpoint: endpoint!, apiKey: apiKey! }),
-  );
+  // Construct lazily: vitest executes a describe.skip callback body at
+  // collection time, so building the client here (with endpoint!/apiKey!
+  // non-null assertions) threw "endpoint is required" and failed the whole
+  // suite whenever creds were absent -- even though every `it` is skipped.
+  // Defer to first use so the skipped path never calls resolveConfig.
+  let client: RainDBClient;
+  const getClient = (): RainDBClient => {
+    client ??= new RainDBClient(resolveConfig({ endpoint: endpoint!, apiKey: apiKey! }));
+    return client;
+  };
 
   it('executeSQL returns columns + rows from the Periscope plane', async () => {
     const table = formationToPeriscopeTable(formation);
-    const result = await client.executeSQL(
+    const result = await getClient().executeSQL(
       `SELECT * FROM entity."${table}" LIMIT 2`,
       { formationId: formation },
     );
@@ -41,7 +48,7 @@ live('live: RainDB transport', () => {
 
   it('executeSQL returns a freshness bookmark for the formation', async () => {
     const table = formationToPeriscopeTable(formation);
-    const result = await client.executeSQL(
+    const result = await getClient().executeSQL(
       `SELECT * FROM entity."${table}" LIMIT 1`,
       { formationId: formation },
     );

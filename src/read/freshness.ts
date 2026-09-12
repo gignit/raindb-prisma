@@ -93,6 +93,7 @@ async function listNewerDropletIds(
   bookmark: RainDBFormationLatest,
 ): Promise<string[]> {
   const ids: string[] = [];
+  if (cfg.maxDriftMerge <= 0) return ids;
   let cursor: string | undefined;
   // `after` filters keys lexicographically greater than the snapshot key,
   // which (UUIDv7 chronological) yields exactly the droplets newer than the
@@ -117,8 +118,10 @@ async function listNewerDropletIds(
     pages++;
     const page = await client.listKeys(bookmark.indexPrefix, {
       pageSize: Math.min(1000, cfg.maxDriftMerge - ids.length),
-      ...(cursor ? { cursor } : {}),
-      ...(after ? { after } : {}),
+      // Accumulate internal pages in one hop, within the recommended 10k target.
+      maxKeys: Math.min(10_000, cfg.maxDriftMerge - ids.length),
+      // Relay `after` overrides the legacy cursor on the server.
+      ...(cursor ? { cursor } : after ? { after } : {}),
     });
     for (const entry of page.keys) {
       const id = dropletIdFromIndexKey(entry.key);

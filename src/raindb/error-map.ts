@@ -20,6 +20,11 @@ import type { MappedError } from '@prisma/driver-adapter-utils';
 export function mapRainDBError(message: string): MappedError | null {
   const m = message.toLowerCase();
 
+  // Scan-layout / plan rejections, including GraphQL and HTTP 400 wrappers.
+  if (m.includes('catalog scan:') || m.includes('planstrategy must be')) {
+    return { kind: 'InvalidInputValue', message };
+  }
+
   // CAS / create-only / idempotency conflicts -> unique constraint violation
   // (Prisma raises P2002).
   if (

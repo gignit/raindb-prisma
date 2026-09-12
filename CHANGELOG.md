@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Corrected server-side in-bolt Prisma deployment to the native Node pod
+  engine (`deployment.json` engine `nodejs-20`), including warm reuse and
+  roughly 1024 MB memory headroom. Retained direct Node and proven browser
+  gateway modes; documented `provider = "postgres"` in `schema.prisma`.
+- Freshness merges use bounded `listKeys.maxKeys` accumulation to reduce
+  network hops. Continuations send the returned cursor without the initial
+  `after` bookmark, preserving page/deadline guards.
+- Scan layout and invalid `planStrategy` failures now become Prisma
+  `InvalidInputValue` errors carrying the original message.
+
 - **Drift is read from the server's `freshnessStatus` verdict, not re-derived.**
   `driftMerge` and the `signal`-mode logger previously hand-rolled
   `snapshotDropletId !== currentDropletId`, which missed the cold-current
@@ -42,6 +52,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `RAINDB_API_KEY`.
 
 ### Notes
+
+- Reconciled against raindb-prime
+  `d6b648277ce1d0ce6efedcf6a9976650393c1655` on 2026-09-12; recorded in
+  `compatibility/upstreams.yaml`. Verified `executeSQL`, `readLatest`,
+  `writeDroplet`, `listKeys`, `publishFormation`, and Node pod deployment.
+  The five GraphQL operation documents remain unchanged. The generator
+  continues to omit `planStrategy` so the formation default applies.
 
 - RainDB Periscope table-name rule: a hyphen in a formation id maps to a
   **double underscore** in the SQL view name (`my-entity` ->

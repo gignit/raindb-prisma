@@ -5,15 +5,26 @@ Prisma ORM against RainDB. A Bolt is a single deployable unit -- it serves
 your app (SPA + API) and is the secure backend; you do not run a separate
 server.
 
-There are two ways the real `PrismaClient` runs, depending on where the
-WebAssembly query engine executes:
+There are three deployment postures:
 
-| Mode | Where PrismaClient runs | When to use |
+| Posture | Where PrismaClient runs | Authentication |
 |------|-------------------------|-------------|
-| **Browser** | the user's browser (the Bolt serves the SPA + acts as the auth/GraphQL gateway) | browser-facing apps; the Bolt holds the RainDB key, the browser never sees it |
-| **In-Bolt (server-side)** | inside the Bolt's goja engine, via the WebAssembly host surface (`raindb.wasm` capability) | server-side logic, headless/cron bolts, lowest latency (no browser round-trip) |
+| **Direct server (Node)** | your backend's native Node runtime | pass `endpoint` and an `rdb_*` `apiKey`; backend only |
+| **Browser + bolt gateway** | the user's browser; the bolt serves the SPA and proxies GraphQL | omit `apiKey`; carry a session credential that the bolt validates before injecting the real key |
+| **In-bolt server (Node pod)** | full native Node runtime inside a warm pod | declare `"engine": "nodejs-20"` in `deployment.json`; read the key from bolt secrets |
 
-Both use the same `@raindb/prisma-adapter`. This guide covers both.
+All use `@raindb/prisma-adapter`. In all three, `schema.prisma` must use:
+
+```prisma
+datasource db {
+  provider = "postgres"
+}
+```
+
+The adapter presents provider `postgres` so Prisma compiles Postgres-dialect
+SQL. Schema changes are RainDB formation publishes, not `prisma migrate`.
+For direct Node usage, construct `new PrismaRainDB({ endpoint, apiKey })`
+and pass it to `new PrismaClient({ adapter })` as in the README.
 
 ---
 
@@ -27,14 +38,14 @@ my-bolt/
   client/dist/           # pre-built SPA (optional; server-only bolts omit it)
   capabilities.json      # what RainDB surface the bolt may touch
   routes.json            # static serving + /api/* route table
-  deployment.json        # mount, healthcheck, CORS
+  deployment.json        # engine selection, mount, healthcheck, CORS
   .secrets/secrets.json  # secret values (local only; staged at first deploy)
 ```
 
-The handler runs on the **goja** engine (a pure-Go JS interpreter). Your
-TypeScript/JS is esbuild-bundled at publish time. The handler is `async`;
-`ctx` exposes the substrate (`ctx.fetch`, `ctx.secrets`, `ctx.jwt`,
-`ctx.db`, `ctx.sql`, `ctx.crypto`, ...).
+The default **goja** engine is a pure-Go JavaScript interpreter without
+WASM support. It can serve a browser app and its GraphQL gateway. To run
+PrismaClient inside the bolt, select the **Node pod engine** instead. The
+CLI builds pod-engine bundles for Node (default target `node20`).
 
 ---
 
@@ -50,13 +61,12 @@ default.
       { "id": "my-model", "ops": ["read", "write", "list"] }
     ],
     "secrets": { "names": ["raindb_url", "raindb_api_key", "app_password", "session_secret"] },
-    "sqlRead": true,
-    "wasm": true
+    "sqlRead": true
   },
   "network": {
     "egress": ["localhost", "127.0.0.1", "raindb.io", "api.raindb.io"]
   },
-  "limits": { "memMb": 256 }
+  "limits": { "memMb": 1024 }
 }
 ```
 
@@ -65,9 +75,8 @@ default.
 | `raindb.formations[]` | per-formation `read`/`write`/`list` grants the bolt's `ctx.db`/`ctx.sql` may touch |
 | `raindb.secrets.names[]` | the secret keys the bolt may read via `ctx.secrets.get(name)` |
 | `raindb.sqlRead` | opt-in for `ctx.sql.query` against the Periscope analytical plane |
-| `raindb.wasm` | **opt-in for the WebAssembly host surface** (in-Bolt PrismaClient). When true and the bundle includes a `.wasm` asset, the engine compiles it once and installs a `WebAssembly` global on every sandbox. Omit it for the browser-mode pattern. |
 | `network.egress[]` | hosts the bolt's `ctx.fetch` may reach |
-| `limits.memMb` | per-invocation memory ceiling (raise to ~256 for the in-Bolt WASM path -- the query engine needs headroom) |
+| `limits.memMb` | requested memory budget; allow roughly 1024 MB for Prisma in a Node pod, subject to platform and tenant policy |
 
 ---
 
@@ -120,10 +129,12 @@ resolves it.
 - `static[]` -- SPA asset serving; `/*` falls back to `index.html` for client routing.
 - `routes[]` -- dynamic routes dispatched to the named handler export.
 
-`deployment.json` carries the mount + healthcheck:
+`deployment.json` selects the runtime and carries the mount + healthcheck.
+For server-side Prisma use:
 
 ```json
 {
+  "engine": "nodejs-20",
   "preferredMount": "/",
   "healthcheckPath": "/api/health",
   "websocket": false,
@@ -156,6 +167,7 @@ raindb-cli --profile <profile> lightning bolt deploy <bolt-name> \
 # Republish (code/config change)
 raindb-cli --profile <profile> lightning bolt deploy <bolt-name> \
   --domain <custom-domain> \
+  --deployment ./deployment.json \
   --capabilities ./capabilities.json \
   --routes ./routes.json
 ```
@@ -173,7 +185,7 @@ Key flags (verified against `cmd/raindb-cli/lightning.go`):
 | `--deployment` | path to `deployment.json` |
 | `--from-secrets` | path to a JSON object of secret name->value (staged at deploy) |
 | `--domain` | custom domain to bind; **pass on EVERY deploy** -- a republish without it reverts the binding |
-| `--engine` | runtime engine (default `goja`) |
+| `--engine` | explicit runtime override; otherwise read `engine` from `--deployment`, defaulting to `goja` |
 
 > **`--domain` is mandatory on every republish.** Omitting it on a
 > subsequent deploy reverts the bolt to its autogen domain.
@@ -204,35 +216,40 @@ const adapter = new PrismaRainDB({
 export const prisma = new PrismaClient({ adapter });
 ```
 
-Vite needs `vite-plugin-wasm` + `vite-plugin-top-level-await` (and a small
-plugin for Prisma's `?module` wasm import) so the WASM client bundles for
-the browser. The bolt does NOT need `raindb.wasm` for this mode -- the WASM
-runs in the browser, not the bolt.
+The browser bundle must include Prisma's WASM query compiler and support
+its WASM imports. The proven browser setup used the `edge-light` client,
+`vite-plugin-wasm`, `vite-plugin-top-level-await`, and handling for Prisma's
+`?module` WASM import. WASM executes in the browser in this posture.
+For cookie sessions, pass `credentials: 'same-origin'` (or `'include'` for
+an appropriately configured cross-origin gateway). The gateway must validate
+the session before forwarding; never ship the `rdb_*` key to the browser.
 
 ---
 
-## 7. In-Bolt (server-side) mode -- requires `raindb.wasm`
+## 7. In-bolt server-side mode: Node pod engine
 
-When you want the full `PrismaClient` to run **inside** the bolt (no browser
-involved -- server-side handlers, cron/trigger bolts, lowest latency),
-declare the `raindb.wasm` capability and bundle the Prisma WASM module. The
-engine compiles it once (cached on the artifact, disposed on idle-evict) and
-installs a `WebAssembly` global on each sandbox, so the bundled
-PrismaClient's WASM query engine runs in goja.
+Set `"engine": "nodejs-20"` in `deployment.json` and pass
+`--deployment ./deployment.json` on deploys, including republishes.
+An explicit `--engine` overrides that file. The CLI selects a Node build
+for the pod engine; package the generated Prisma client and its WASM assets
+with the server bundle.
 
-```json
-// capabilities.json
-{ "raindb": { "formations": [...], "secrets": {...}, "wasm": true } }
-```
+A pod runs a full native Node runtime, including native WASM support for
+Prisma's query compiler. Keep the RainDB key in declared bolt secrets and
+construct the adapter server-side using those secret values.
+Initialize PrismaClient once at pod startup or lazily on the first request,
+then reuse that instance across requests while the pod is warm.
 
-The bolt's bundle must include the `.wasm` asset alongside the JS. With
-`raindb.wasm` on, `WebAssembly.instantiate` inside the bundle resolves to
-the engine's pre-compiled module.
+The pod boots once and stays warm across requests. The seeded engine policy
+uses a **300-second idle TTL** (about five minutes), reset on invocation;
+idle expiry tears down the pod, and the next request boots a fresh one.
+It also has a one-hour maximum lifetime. Tenant policy can shorten these
+lifetimes, so do not rely on process memory for durable state.
 
-> Capability-gated by design: bolts that don't declare `raindb.wasm` get no
-> WebAssembly surface and pay no WASM compile cost. This keeps the ~99% of
-> bolts that never touch WASM fast, consistent with RainDB's lazy
-> per-tenant engine model.
+The seeded Node engine provides **1024 MB memory headroom** for Prisma.
+Size the bolt's requested memory accordingly; actual resource allocation
+is governed by platform and tenant policy. This replaces the old guide's
+incorrect 256 MB server-side recommendation.
 
 ---
 

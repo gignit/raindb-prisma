@@ -13,7 +13,7 @@ import { PrismaRainDB } from '@raindb/prisma-adapter';
 
 const adapter = new PrismaRainDB({
   endpoint: process.env.RAINDB_ENDPOINT!, // https://api.raindb.io/graphql
-  apiKey:   process.env.RAINDB_API_KEY!,  // rdb_... or rgr1.... grant token
+  apiKey:   process.env.RAINDB_API_KEY!,  // rdb_... (backend only)
 });
 
 const prisma = new PrismaClient({ adapter });
@@ -24,8 +24,17 @@ const one    = await prisma.user.findUnique({ where: { id } });
 const made   = await prisma.user.create({ data: { email, name } });
 ```
 
-That is the whole integration. Swap the adapter line; the rest of your
-Prisma code is untouched.
+In `schema.prisma`, use the Postgres datasource:
+
+```prisma
+datasource db {
+  provider = "postgres"
+}
+```
+
+The adapter presents provider `postgres`, so Prisma compiles Postgres-dialect
+SQL. RainDB remains the database; use formation publishes instead of Prisma
+migrations.
 
 ---
 
@@ -186,7 +195,7 @@ RainDB failures surface as standard Prisma errors:
 | RainDB condition | Prisma error |
 |---|---|
 | CAS / create-only / idempotency conflict | unique constraint violation (`P2002`) |
-| schema validation / required field | invalid input value |
+| schema validation / required field / scan layout or plan rejection | invalid input value |
 | unknown formation | table does not exist |
 | 401 | authentication failed |
 | timeout | socket timeout |
@@ -207,22 +216,24 @@ running destructive migrations. (See the generator package docs.)
 
 ## Deploying as a Lightning Bolt (one deployable unit, no separate server)
 
-A RainDB **Lightning Bolt** can be your entire backend: it serves your SPA,
-authenticates the app, and is the secure RainDB gateway -- the tenant key
-never leaves the bolt. The real `PrismaClient` runs either in the browser
-(the bolt serves the SPA + gateways the calls) or **inside the bolt itself**
-(server-side, via the `raindb.wasm` capability that lets the WASM query
-engine run in the bolt's runtime).
+Choose one of three deployment postures:
 
-The full, source-grounded walkthrough -- bolt anatomy, `capabilities.json`
-(including the `raindb.wasm` opt-in), the secure session-token auth model,
-`routes.json`/`deployment.json`, the `raindb-cli lightning bolt deploy`
-command + flags, and both browser-mode and in-bolt modes -- is in:
+| Posture | Prisma runtime | Authentication |
+|---|---|---|
+| Direct server | Native Node on your backend | `new PrismaRainDB({ endpoint, apiKey })` with an `rdb_*` key; backend only. |
+| Browser + bolt gateway | Real WASM PrismaClient in the browser | Omit `apiKey`; point `endpoint` at the bolt's `/graphql`. Carry a session token with `headers` or cookies with `credentials`; the bolt validates the session and injects the real key server-side. |
+| Server-side inside a bolt | Native Node in a **Node pod** | Set `"engine": "nodejs-20"` in `deployment.json`. Keep the RainDB key in bolt secrets. |
 
-**[`docs/LIGHTNING_BOLT_GUIDE.md`](docs/LIGHTNING_BOLT_GUIDE.md)**
+The Node pod runs Prisma's WASM query compiler natively. Initialize
+PrismaClient once and reuse it while the pod is warm. The seeded pod policy
+has a five-minute idle TTL and 1024 MB memory headroom for Prisma; actual
+lifecycle and resource limits depend on platform and tenant configuration.
+The default `goja` engine is a pure-Go JavaScript interpreter without WASM
+support and cannot run the real PrismaClient server-side.
 
-A working reference bolt (Prisma on RainDB, live) is the `crexprisma`
-project.
+The browser gateway posture was live-verified with a real WASM PrismaClient
+and a session token. See **[`docs/LIGHTNING_BOLT_GUIDE.md`](docs/LIGHTNING_BOLT_GUIDE.md)**
+for deployment and authentication details.
 
 ---
 
@@ -232,7 +243,7 @@ Early release. The read path (Periscope SQL + freshness merge), the write
 path (create/update/delete translation), error mapping, and the RainDB
 transport are implemented and tested -- including live integration tests
 against a production RainDB tenant. The adapter runs server-side (Node), in
-the browser, and inside a Lightning Bolt. See `CHANGELOG.md`.
+the browser, and inside a Lightning Bolt using the Node pod engine. See `CHANGELOG.md`.
 
 ## License
 

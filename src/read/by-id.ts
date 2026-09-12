@@ -12,7 +12,7 @@
  * (joins, ranges, multi-row, projections we can't satisfy from the droplet),
  * it returns null and the caller falls back to the Periscope SQL path.
  */
-import type { SqlQuery, SqlResultSet } from '@prisma/driver-adapter-utils';
+import type { SqlResultSet } from '@prisma/driver-adapter-utils';
 import type { ResolvedConfig } from '../config.js';
 import type { RainDBClient } from '../raindb/client.js';
 import type { FormationNameMap } from '../sql/identifiers.js';
